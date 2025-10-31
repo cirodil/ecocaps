@@ -1,0 +1,66 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  database:
+    image: postgres:15
+    container_name: cap_database
+    environment:
+      POSTGRES_DB: cap_collection
+      POSTGRES_USER: cap_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - cap_network
+    restart: unless-stopped
+
+  # FastAPI Backend
+  backend:
+    build: ./backend
+    container_name: cap_backend
+    environment:
+      - DATABASE_URL=postgresql://cap_user:${DB_PASSWORD}@database:5432/cap_collection
+    depends_on:
+      - database
+    networks:
+      - cap_network
+    restart: unless-stopped
+
+  # Streamlit Frontend
+  frontend:
+    build: ./frontend
+    container_name: cap_frontend
+    environment:
+      - API_BASE_URL=http://backend:8000
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    depends_on:
+      - backend
+    networks:
+      - cap_network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: cap_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - /etc/letsencrypt:/etc/letsencrypt
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - cap_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  cap_network:
+    driver: bridge
