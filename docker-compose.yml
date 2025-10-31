@@ -15,7 +15,8 @@ services:
     networks:
       - cap_network
     restart: unless-stopped
-
+  env_file:
+    - .env
   # FastAPI Backend
   backend:
     build: ./backend
