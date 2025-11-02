@@ -15,6 +15,12 @@ services:
     networks:
       - cap_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cap_user -d cap_collection"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # FastAPI Backend
   backend:
@@ -28,10 +34,17 @@ services:
       ALLOWED_ORIGINS: https://eco.shablschool.ru,http://localhost:8501
       SECRET_KEY: ${SECRET_KEY}
     depends_on:
-      - database
+      database:
+        condition: service_healthy
     networks:
       - cap_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # Streamlit Frontend
   frontend:
@@ -43,7 +56,8 @@ services:
       STREAMLIT_SERVER_PORT: "8501"
       STREAMLIT_THEME_BASE: light
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - cap_network
     restart: unless-stopped
@@ -61,7 +75,6 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - frontend
-      - backend
     networks:
       - cap_network
     restart: unless-stopped

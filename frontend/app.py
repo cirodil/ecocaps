@@ -11,23 +11,10 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 # Health check function
 def health_check():
     try:
-        response = requests.get(f"{API_BASE_URL}/docs", timeout=5)
+        response = requests.get(f"{API_BASE_URL}/health", timeout=5)
         return response.status_code == 200
     except:
         return False
-
-# Добавьте health check endpoint для Streamlit
-if st.runtime.exists():
-    if st.request.path == "/healthz":
-        if health_check():
-            st.write("OK")
-            st.stop()
-        else:
-            st.status_code(503)
-            st.write("Service Unavailable")
-            st.stop()
-
-st.set_page_config(page_title="Сбор крышек", page_icon="♻️", layout="wide")
 
 # Authentication
 def check_admin_password():
@@ -38,8 +25,7 @@ def login():
     password = st.sidebar.text_input("Пароль администратора", type="password")
     
     if st.sidebar.button("Войти"):
-        # Simple password check - in production use proper authentication
-        if password == "admin123":  # Change this password
+        if password == ADMIN_PASSWORD:
             st.session_state.admin_authenticated = True
             st.sidebar.success("Успешный вход!")
             st.rerun()
@@ -51,13 +37,18 @@ def main():
     st.title("♻️ Геймификация сбора пластиковых крышек")
     st.markdown("---")
     
+    # Check if backend is available
+    if not health_check():
+        st.error("⚠️ Сервер временно недоступен. Пожалуйста, попробуйте позже.")
+        return
+    
     # Public section - always visible
     col1, col2 = st.columns(2)
     
     with col1:
         st.header("🏆 Рейтинг участников")
         try:
-            response = requests.get(f"{API_BASE_URL}/leaderboard")
+            response = requests.get(f"{API_BASE_URL}/leaderboard", timeout=10)
             if response.status_code == 200:
                 leaderboard = response.json()
                 df_individual = pd.DataFrame(leaderboard)
@@ -76,7 +67,7 @@ def main():
     with col2:
         st.header("🏅 Рейтинг классов")
         try:
-            response = requests.get(f"{API_BASE_URL}/class-leaderboard")
+            response = requests.get(f"{API_BASE_URL}/class-leaderboard", timeout=10)
             if response.status_code == 200:
                 class_leaderboard = response.json()
                 df_class = pd.DataFrame(class_leaderboard)
@@ -97,7 +88,7 @@ def main():
     col1, col2, col3 = st.columns(3)
     
     try:
-        response = requests.get(f"{API_BASE_URL}/leaderboard")
+        response = requests.get(f"{API_BASE_URL}/leaderboard", timeout=10)
         if response.status_code == 200:
             leaderboard = response.json()
             total_caps = sum(item['cap_count'] for item in leaderboard)
@@ -127,7 +118,7 @@ def admin_section():
     with tab1:
         st.subheader("Управление пользователями")
         try:
-            response = requests.get(f"{API_BASE_URL}/users")
+            response = requests.get(f"{API_BASE_URL}/users", timeout=10)
             if response.status_code == 200:
                 users = response.json()
                 df_users = pd.DataFrame(users)
@@ -203,8 +194,8 @@ def admin_section():
     with tab3:
         st.subheader("Административная статистика")
         try:
-            users_response = requests.get(f"{API_BASE_URL}/users")
-            leaderboard_response = requests.get(f"{API_BASE_URL}/leaderboard")
+            users_response = requests.get(f"{API_BASE_URL}/users", timeout=10)
+            leaderboard_response = requests.get(f"{API_BASE_URL}/leaderboard", timeout=10)
             
             if users_response.status_code == 200 and leaderboard_response.status_code == 200:
                 users = users_response.json()

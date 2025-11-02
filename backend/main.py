@@ -7,11 +7,35 @@ from pydantic import BaseModel
 from typing import List
 from datetime import datetime
 import os
+import time
+import logging
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Get environment variables
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cap_user:password@database:5432/cap_collection")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8501,https://eco.shablschool.ru").split(",")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
+# Функция для ожидания базы данных
+def wait_for_database():
+    import psycopg2
+    retries = 5
+    for i in range(retries):
+        try:
+            conn = psycopg2.connect(DATABASE_URL)
+            conn.close()
+            logger.info("Database connection successful")
+            return True
+        except psycopg2.OperationalError as e:
+            logger.warning(f"Database not ready, retrying... ({i+1}/{retries})")
+            time.sleep(5)
+    raise Exception("Could not connect to database after multiple attempts")
+
+# Ждем базу данных перед созданием engine
+wait_for_database()
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -78,12 +102,21 @@ def get_db():
 
 @app.on_event("startup")
 async def startup():
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Error creating database tables: {e}")
+        raise
 
 # API Routes
 @app.get("/")
 def read_root():
-    return {"message": "Cap Collection API is running"}
+    return {"message": "Cap Collection API is running", "status": "healthy"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
 
 @app.get("/verify-pin/{pin_code}")
 def verify_pin(pin_code: str, db: Session = Depends(get_db)):
