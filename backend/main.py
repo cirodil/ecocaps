@@ -10,19 +10,8 @@ import os
 
 # Get environment variables
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cap_user:password@database:5432/cap_collection")
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://eco.shablschool.ru").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8501,https://eco.shablschool.ru").split(",")
 
-app = FastAPI(title="Cap Collection API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Database setup
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -31,7 +20,7 @@ app = FastAPI(title="Cap Collection API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -91,6 +80,10 @@ async def startup():
     Base.metadata.create_all(bind=engine)
 
 # API Routes
+@app.get("/")
+def read_root():
+    return {"message": "Cap Collection API is running"}
+
 @app.get("/verify-pin/{pin_code}")
 def verify_pin(pin_code: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.pin_code == pin_code).first()
@@ -169,7 +162,6 @@ def update_user(user_id: int, user: UserCreate, db: Session = Depends(get_db)):
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Check if PIN is already used by another user
     pin_user = db.query(User).filter(User.pin_code == user.pin_code, User.id != user_id).first()
     if pin_user:
         raise HTTPException(status_code=400, detail="PIN already exists")
@@ -188,7 +180,6 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Delete associated cap entries
     db.query(CapEntry).filter(CapEntry.user_id == user_id).delete()
     db.delete(user)
     db.commit()
