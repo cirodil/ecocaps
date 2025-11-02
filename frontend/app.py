@@ -3,16 +3,12 @@ import requests
 import pandas as pd
 from datetime import datetime
 import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
-# Configuration
+# Configuration from environment variables
 API_BASE_URL = os.getenv("API_BASE_URL", "http://backend:8000")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
-# Health check endpoint
+# Health check function
 def health_check():
     try:
         response = requests.get(f"{API_BASE_URL}/docs", timeout=5)

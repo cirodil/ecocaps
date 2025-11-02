@@ -7,15 +7,22 @@ from pydantic import BaseModel
 from typing import List
 from datetime import datetime
 import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Get environment variables
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cap_user:password@database:5432/cap_collection")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://eco.shablschool.ru").split(",")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://username:password@localhost/cap_collection")
-HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", 8000))
+app = FastAPI(title="Cap Collection API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Database setup
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
