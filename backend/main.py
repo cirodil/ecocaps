@@ -11,12 +11,13 @@ import os
 # Get environment variables
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cap_user:password@database:5432/cap_collection")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8501,https://eco.shablschool.ru").split(",")
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="Cap Collection API")
+app = FastAPI(title="Cap Collection API", debug=DEBUG)
 
 app.add_middleware(
     CORSMiddleware,
