@@ -45,7 +45,7 @@ app = FastAPI(title="Cap Collection API", debug=DEBUG)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=["*"],  # Разрешаем все origins для тестирования
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -102,12 +102,8 @@ def get_db():
 
 @app.on_event("startup")
 async def startup():
-    try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
-    except Exception as e:
-        logger.error(f"Error creating database tables: {e}")
-        raise
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created successfully")
 
 # API Routes
 @app.get("/")
@@ -116,10 +112,12 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    return "OK"
 
+# Ключевые эндпоинты для ESP32
 @app.get("/verify-pin/{pin_code}")
 def verify_pin(pin_code: str, db: Session = Depends(get_db)):
+    logger.info(f"Verifying PIN: {pin_code}")
     user = db.query(User).filter(User.pin_code == pin_code).first()
     if user:
         return "valid"
@@ -128,6 +126,7 @@ def verify_pin(pin_code: str, db: Session = Depends(get_db)):
 
 @app.post("/add-cap")
 def add_cap(cap_data: CapAdd, db: Session = Depends(get_db)):
+    logger.info(f"Adding cap for PIN: {cap_data.pin_code}")
     user = db.query(User).filter(User.pin_code == cap_data.pin_code).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
