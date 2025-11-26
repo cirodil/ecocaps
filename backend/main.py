@@ -144,13 +144,6 @@ def get_class_leaderboard(db: Session = Depends(get_db)):
 def get_users(db: Session = Depends(get_db)):
     return db.query(User).all()
 
-@app.get("/api/debug")
-def debug_info():
-    return {
-        "status": "backend is running",
-        "database_url": DATABASE_URL.replace('password', '***') if DATABASE_URL else None,
-        "timestamp": datetime.now().isoformat()
-    }
 
 @app.get("/api/test-connection")
 def test_connection(db: Session = Depends(get_db)):
@@ -176,6 +169,60 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     return new_user
+
+@app.put("/api/users/{user_id}")
+def update_user(user_id: int, user_data: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Проверяем, не используется ли PIN другим пользователем
+    if user_data.pin_code != db_user.pin_code:
+        existing_user = db.query(User).filter(User.pin_code == user_data.pin_code).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="PIN already exists")
+    
+    db_user.full_name = user_data.full_name
+    db_user.class_name = user_data.class_name
+    db_user.pin_code = user_data.pin_code
+    
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Также удаляем все записи о крышках этого пользователя
+    db.query(CapEntry).filter(CapEntry.user_id == user_id).delete()
+    db.delete(db_user)
+    db.commit()
+    
+    return {"message": "User deleted successfully"}
+
+# Добавьте эндпоинт для отладки
+@app.get("/api/debug")
+def debug_info():
+    return {
+        "status": "backend is running", 
+        "timestamp": datetime.now().isoformat(),
+        "endpoints": [
+            "/health",
+            "/api/health", 
+            "/api/verify-pin/{pin}",
+            "/api/add-cap",
+            "/api/leaderboard",
+            "/api/class-leaderboard",
+            "/api/users"
+        ]
+    }
+
+@app.get("/api/health")
+def api_health_check():
+    return "API OK"
 
 if __name__ == "__main__":
     import uvicorn
