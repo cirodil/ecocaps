@@ -33,6 +33,8 @@ services:
       DEBUG: "False"
       ALLOWED_ORIGINS: https://eco.shablschool.ru,http://localhost:8501
       SECRET_KEY: ${SECRET_KEY}
+    ports:
+      - "8000:8000"
     depends_on:
       database:
         condition: service_healthy
