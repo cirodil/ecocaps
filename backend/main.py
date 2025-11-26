@@ -144,6 +144,14 @@ def get_class_leaderboard(db: Session = Depends(get_db)):
 def get_users(db: Session = Depends(get_db)):
     return db.query(User).all()
 
+@app.get("/api/test")
+def test_endpoint():
+    return {
+        "message": "Backend is working", 
+        "api_prefix": "working",
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/api/users", response_model=UserResponse)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.pin_code == user.pin_code).first()
