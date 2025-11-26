@@ -4,23 +4,19 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 import os
-import time
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cap_user:password@database:5432/cap_collection")
 
-# Create engine and session
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# FastAPI app
 app = FastAPI(title="Cap Collection API", version="1.0.0")
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -91,8 +87,8 @@ def read_root():
 def health_check():
     return "OK"
 
-# API endpoints for ESP32
-@app.get("/verify-pin/{pin_code}")
+# API endpoints with /api prefix
+@app.get("/api/verify-pin/{pin_code}")
 def verify_pin(pin_code: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.pin_code == pin_code).first()
     if user:
@@ -100,7 +96,7 @@ def verify_pin(pin_code: str, db: Session = Depends(get_db)):
     else:
         return "invalid"
 
-@app.post("/add-cap")
+@app.post("/api/add-cap")
 def add_cap(cap_data: CapAdd, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.pin_code == cap_data.pin_code).first()
     if not user:
@@ -112,28 +108,7 @@ def add_cap(cap_data: CapAdd, db: Session = Depends(get_db)):
     
     return {"message": "Cap added successfully"}
 
-# Admin endpoints
-@app.get("/users", response_model=List[UserResponse])
-def get_users(db: Session = Depends(get_db)):
-    return db.query(User).all()
-
-@app.post("/users", response_model=UserResponse)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.pin_code == user.pin_code).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="PIN already exists")
-    
-    new_user = User(
-        full_name=user.full_name,
-        class_name=user.class_name,
-        pin_code=user.pin_code
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
-
-@app.get("/leaderboard", response_model=List[LeaderboardEntry])
+@app.get("/api/leaderboard", response_model=List[LeaderboardEntry])
 def get_leaderboard(db: Session = Depends(get_db)):
     result = db.query(
         User.full_name,
@@ -150,7 +125,7 @@ def get_leaderboard(db: Session = Depends(get_db)):
         cap_count=row.cap_count
     ) for row in result]
 
-@app.get("/class-leaderboard", response_model=List[ClassLeaderboardEntry])
+@app.get("/api/class-leaderboard", response_model=List[ClassLeaderboardEntry])
 def get_class_leaderboard(db: Session = Depends(get_db)):
     result = db.query(
         User.class_name,
@@ -164,6 +139,26 @@ def get_class_leaderboard(db: Session = Depends(get_db)):
         class_name=row.class_name,
         total_caps=row.total_caps
     ) for row in result]
+
+@app.get("/api/users", response_model=List[UserResponse])
+def get_users(db: Session = Depends(get_db)):
+    return db.query(User).all()
+
+@app.post("/api/users", response_model=UserResponse)
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.pin_code == user.pin_code).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="PIN already exists")
+    
+    new_user = User(
+        full_name=user.full_name,
+        class_name=user.class_name,
+        pin_code=user.pin_code
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
 if __name__ == "__main__":
     import uvicorn

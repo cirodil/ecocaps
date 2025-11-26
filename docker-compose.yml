@@ -33,7 +33,7 @@ services:
     build: ./frontend
     container_name: cap_frontend
     environment:
-      API_BASE_URL: http://backend:8000 # Внутри Docker сети остается 8000
+      API_BASE_URL: http://backend:8000/api # Добавлен /api
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     depends_on:
       - backend
