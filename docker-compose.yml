@@ -33,8 +33,10 @@ services:
     build: ./frontend
     container_name: cap_frontend
     environment:
-      API_BASE_URL: http://backend:8000/api # Добавлен /api
+      API_BASE_URL: http://95.107.32.47/api
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    ports:
+      - "8501:8501" # Добавляем порт для прямого доступа
     depends_on:
       - backend
     networks:

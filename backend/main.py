@@ -144,13 +144,22 @@ def get_class_leaderboard(db: Session = Depends(get_db)):
 def get_users(db: Session = Depends(get_db)):
     return db.query(User).all()
 
-@app.get("/api/test")
-def test_endpoint():
+@app.get("/api/debug")
+def debug_info():
     return {
-        "message": "Backend is working", 
-        "api_prefix": "working",
+        "status": "backend is running",
+        "database_url": DATABASE_URL.replace('password', '***') if DATABASE_URL else None,
         "timestamp": datetime.now().isoformat()
     }
+
+@app.get("/api/test-connection")
+def test_connection(db: Session = Depends(get_db)):
+    try:
+        # Простая проверка БД
+        db.execute("SELECT 1")
+        return {"status": "OK", "database": "connected"}
+    except Exception as e:
+        return {"status": "ERROR", "database": str(e)}
 
 @app.post("/api/users", response_model=UserResponse)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
