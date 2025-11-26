@@ -4,48 +4,26 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import os
 import time
-import logging
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Get environment variables
+# Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cap_user:password@database:5432/cap_collection")
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8501,https://eco.shablschool.ru").split(",")
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-# Функция для ожидания базы данных
-def wait_for_database():
-    import psycopg2
-    retries = 5
-    for i in range(retries):
-        try:
-            conn = psycopg2.connect(DATABASE_URL)
-            conn.close()
-            logger.info("Database connection successful")
-            return True
-        except psycopg2.OperationalError as e:
-            logger.warning(f"Database not ready, retrying... ({i+1}/{retries})")
-            time.sleep(5)
-    raise Exception("Could not connect to database after multiple attempts")
-
-# Ждем базу данных перед созданием engine
-wait_for_database()
-
+# Create engine and session
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="Cap Collection API", debug=DEBUG)
+# FastAPI app
+app = FastAPI(title="Cap Collection API", version="1.0.0")
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Разрешаем все origins для тестирования
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -101,23 +79,21 @@ def get_db():
         db.close()
 
 @app.on_event("startup")
-async def startup():
+def startup():
     Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created successfully")
 
-# API Routes
+# Basic endpoints
 @app.get("/")
 def read_root():
-    return {"message": "Cap Collection API is running", "status": "healthy"}
+    return {"message": "Cap Collection API", "status": "running"}
 
 @app.get("/health")
 def health_check():
     return "OK"
 
-# Ключевые эндпоинты для ESP32
+# API endpoints for ESP32
 @app.get("/verify-pin/{pin_code}")
 def verify_pin(pin_code: str, db: Session = Depends(get_db)):
-    logger.info(f"Verifying PIN: {pin_code}")
     user = db.query(User).filter(User.pin_code == pin_code).first()
     if user:
         return "valid"
@@ -126,7 +102,6 @@ def verify_pin(pin_code: str, db: Session = Depends(get_db)):
 
 @app.post("/add-cap")
 def add_cap(cap_data: CapAdd, db: Session = Depends(get_db)):
-    logger.info(f"Adding cap for PIN: {cap_data.pin_code}")
     user = db.query(User).filter(User.pin_code == cap_data.pin_code).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -136,6 +111,27 @@ def add_cap(cap_data: CapAdd, db: Session = Depends(get_db)):
     db.commit()
     
     return {"message": "Cap added successfully"}
+
+# Admin endpoints
+@app.get("/users", response_model=List[UserResponse])
+def get_users(db: Session = Depends(get_db)):
+    return db.query(User).all()
+
+@app.post("/users", response_model=UserResponse)
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.pin_code == user.pin_code).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="PIN already exists")
+    
+    new_user = User(
+        full_name=user.full_name,
+        class_name=user.class_name,
+        pin_code=user.pin_code
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
 @app.get("/leaderboard", response_model=List[LeaderboardEntry])
 def get_leaderboard(db: Session = Depends(get_db)):
@@ -169,52 +165,6 @@ def get_class_leaderboard(db: Session = Depends(get_db)):
         total_caps=row.total_caps
     ) for row in result]
 
-@app.get("/users", response_model=List[UserResponse])
-def get_users(db: Session = Depends(get_db)):
-    return db.query(User).all()
-
-@app.post("/users", response_model=UserResponse)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.pin_code == user.pin_code).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="PIN already exists")
-    
-    new_user = User(
-        full_name=user.full_name,
-        class_name=user.class_name,
-        pin_code=user.pin_code
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
-
-@app.put("/users/{user_id}", response_model=UserResponse)
-def update_user(user_id: int, user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.id == user_id).first()
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    pin_user = db.query(User).filter(User.pin_code == user.pin_code, User.id != user_id).first()
-    if pin_user:
-        raise HTTPException(status_code=400, detail="PIN already exists")
-    
-    db_user.full_name = user.full_name
-    db_user.class_name = user.class_name
-    db_user.pin_code = user.pin_code
-    
-    db.commit()
-    db.refresh(db_user)
-    return db_user
-
-@app.delete("/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    db.query(CapEntry).filter(CapEntry.user_id == user_id).delete()
-    db.delete(user)
-    db.commit()
-    
-    return {"message": "User deleted successfully"}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
